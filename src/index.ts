@@ -1,6 +1,7 @@
 import { initializeSchema } from './db/schema.js';
 import { validateConfig, config } from './config.js';
 import { startCLIDashboard } from './cli/dashboard.js';
+import { startWebServer } from './api/server.js';
 import { sourcingAgent } from './agents/sourcingAgent.js';
 import { ceoAgent } from './agents/ceoAgent.js';
 import { operationsAgent } from './agents/operationsAgent.js';
@@ -12,7 +13,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function ensureDirectories() {
-  const dirs = ['logs', 'dist'];
+  const dirs = ['logs', 'dist', 'web/dist'];
   for (const dir of dirs) {
     const dirPath = path.join(__dirname, '..', dir);
     if (!fs.existsSync(dirPath)) {
@@ -106,14 +107,19 @@ async function main() {
 
   const args = process.argv.slice(2);
 
-  if (args.includes('--cli') || args.includes('-i')) {
+  if (args.includes('--web')) {
+    console.log('\n🌐 Starting Web Interface...\n');
+    await startWebServer(3000);
+    console.log('\n💡 Open http://localhost:3000 in your browser\n');
+    await new Promise(() => {}); // Keep running
+  } else if (args.includes('--cli') || args.includes('-i')) {
     console.log('\n📱 Starting Interactive CLI Dashboard...\n');
     await startCLIDashboard();
   } else {
     console.log('\n⚙️ Running automated sourcing cycle...\n');
     await runFullSourcingCycle();
     console.log('✨ Sourcing cycle complete!\n');
-    console.log('💡 Tip: Run with --cli flag for interactive dashboard\n');
+    console.log('💡 Tips:\n  npm start -- --cli          (interactive dashboard)\n  npm start -- --web          (web interface)\n');
   }
 }
 
