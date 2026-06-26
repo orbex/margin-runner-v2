@@ -1,5 +1,8 @@
 import fetch from 'node-fetch';
 import { RawDeal } from './dealScorer.js';
+import { scrapeWalmartClearance } from './walmartScraper.js';
+import { scrapeTargetClearance } from './targetScraper.js';
+import { scrapeLiquidationDeals } from './liquidationScraper.js';
 
 export class PriceLookup {
   async getMarketPrice(title: string, retailPrice: number): Promise<number> {
@@ -74,57 +77,18 @@ export class PriceLookup {
 
 export class Scraper {
   async scrapeWalmartClearance(): Promise<RawDeal[]> {
-    console.log('Scraping Walmart clearance (demo)...');
-    return [
-      {
-        title: 'Sony Wireless Headphones WH-CH720S',
-        sourceUrl: 'https://walmart.com/clearance',
-        sourceType: 'walmart',
-        acquisitionCost: 45,
-        retailPrice: 99.99,
-        weight: 0.5,
-        imageUrl: 'https://via.placeholder.com/200?text=Sony+Headphones',
-      },
-      {
-        title: 'LEGO City Police Station Set',
-        sourceUrl: 'https://walmart.com/clearance',
-        sourceType: 'walmart',
-        acquisitionCost: 25,
-        retailPrice: 59.99,
-        weight: 2,
-        imageUrl: 'https://via.placeholder.com/200?text=LEGO+Set',
-      },
-    ];
+    console.log('Scraping Walmart clearance...');
+    return scrapeWalmartClearance();
   }
 
   async scrapeTargetClearance(): Promise<RawDeal[]> {
-    console.log('Scraping Target clearance (demo)...');
-    return [
-      {
-        title: 'Samsung Galaxy Buds Pro Earbuds',
-        sourceUrl: 'https://target.com/clearance',
-        sourceType: 'target',
-        acquisitionCost: 80,
-        retailPrice: 199.99,
-        weight: 0.2,
-        imageUrl: 'https://via.placeholder.com/200?text=Samsung+Buds',
-      },
-    ];
+    console.log('Scraping Target clearance...');
+    return scrapeTargetClearance();
   }
 
   async scrapeLiquidationSites(): Promise<RawDeal[]> {
-    console.log('Scraping liquidation sites (demo)...');
-    return [
-      {
-        title: 'Apple iPad (10th Generation) 64GB WiFi',
-        sourceUrl: 'https://liquidation.com',
-        sourceType: 'liquidation',
-        acquisitionCost: 250,
-        retailPrice: 349,
-        weight: 0.5,
-        imageUrl: 'https://via.placeholder.com/200?text=iPad',
-      },
-    ];
+    console.log('Scraping liquidation sites...');
+    return scrapeLiquidationDeals();
   }
 
   async scrapeEbayOutlet(): Promise<RawDeal[]> {
