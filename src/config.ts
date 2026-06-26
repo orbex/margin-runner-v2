@@ -23,6 +23,12 @@ export const config = {
   claude: {
     apiKey: process.env.CLAUDE_API_KEY || '',
   },
+  llm: {
+    provider: (process.env.LLM_PROVIDER || 'claude') as 'claude' | 'ollama',
+    claudeModel: process.env.CLAUDE_MODEL || 'claude-opus-4-7',
+    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+    ollamaModel: process.env.OLLAMA_MODEL || 'llama3.2',
+  },
   keepa: {
     apiKey: process.env.KEEPA_API_KEY || '',
   },
@@ -54,17 +60,10 @@ export const config = {
 };
 
 export function validateConfig() {
-  const required = [
-    'claude.apiKey',
-  ];
-
-  const missingVars = required.filter(key => {
-    const [section, field] = key.split('.');
-    return !config[section as keyof typeof config]?.[field as any];
-  });
-
-  if (missingVars.length > 0) {
-    console.warn('⚠️ Missing environment variables:', missingVars);
-    console.warn('Set them in .env file. eBay/Amazon keys optional for initial demo.');
+  if (config.llm.provider === 'claude' && !config.claude.apiKey) {
+    console.warn('⚠️ CLAUDE_API_KEY is not set. Set it in .env or switch to LLM_PROVIDER=ollama.');
+  }
+  if (config.llm.provider === 'ollama' && !config.llm.ollamaBaseUrl) {
+    console.warn('⚠️ OLLAMA_BASE_URL is not set. Defaulting to http://localhost:11434.');
   }
 }

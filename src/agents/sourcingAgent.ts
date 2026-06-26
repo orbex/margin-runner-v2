@@ -1,13 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
+import { getLLMProvider } from '../llm/provider.js';
 import { Deal } from '../types/index.js';
 import { dealScorer, RawDeal } from '../sourcing/dealScorer.js';
 import { scraper, priceLookup } from '../sourcing/scrapers.js';
 import { dealQueries, agentDecisionQueries } from '../db/queries.js';
-
-const client = new Anthropic({
-  apiKey: config.claude.apiKey,
-});
 
 export class SourcingAgent {
   async discoverAndScoreManyDeals(): Promise<Deal[]> {
@@ -57,21 +53,13 @@ export class SourcingAgent {
       2
     );
 
-    const message = await client.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 1024,
-      system: `You are a sourcing expert. Rank these deals by profitability and likelihood of success.
+    const responseText = await getLLMProvider().chat(
+      `You are a sourcing expert. Rank these deals by profitability and likelihood of success.
 Return a JSON array of deal IDs ordered from best to worst.
 Consider: profit potential, demand, feasibility, and balance.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Rank these deals:\n${dealsJson}`,
-        },
-      ],
-    });
-
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+      `Rank these deals:\n${dealsJson}`,
+      1024
+    );
     const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
 
     if (jsonMatch) {

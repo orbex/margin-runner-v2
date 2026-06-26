@@ -1,11 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
+import { getLLMProvider } from '../llm/provider.js';
 import { Deal, WeeklyKPI } from '../types/index.js';
 import { dealQueries, agentDecisionQueries, saleQueries } from '../db/queries.js';
-
-const client = new Anthropic({
-  apiKey: config.claude.apiKey,
-});
 
 export class CEOAgent {
   async reviewAndApproveDeals(topDeals: Deal[]): Promise<Deal[]> {
@@ -23,10 +19,8 @@ export class CEOAgent {
       2
     );
 
-    const message = await client.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 1024,
-      system: `You are the CEO of an arbitrage reselling business. Your role is to review sourced deals and decide which ones to approve for purchase.
+    const responseText = await getLLMProvider().chat(
+      `You are the CEO of an arbitrage reselling business. Your role is to review sourced deals and decide which ones to approve for purchase.
 
 Consider:
 - Profit margin (need >20%)
@@ -35,15 +29,9 @@ Consider:
 - Portfolio balance (mix of items across price ranges)
 
 Respond with a JSON array of indices (0-based) of deals you approve.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Review these top 10 deals and approve promising ones:\n${dealsJson}`,
-        },
-      ],
-    });
-
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+      `Review these top 10 deals and approve promising ones:\n${dealsJson}`,
+      1024
+    );
     const jsonMatch = responseText.match(/\[[\d,\s]*\]/);
 
     if (!jsonMatch) {
@@ -118,14 +106,9 @@ Respond with a JSON array of indices (0-based) of deals you approve.`,
     const revenueGap = config.business.targetWeeklyRevenue - kpi.totalProfit;
     const performancePercent = (kpi.totalProfit / config.business.targetWeeklyRevenue) * 100;
 
-    const message = await client.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 500,
-      system: `You are the CEO. Based on weekly performance, provide strategic recommendations in 2-3 sentences. Focus on actionable changes.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Weekly Performance:
+    const recommendation = await getLLMProvider().chat(
+      `You are the CEO. Based on weekly performance, provide strategic recommendations in 2-3 sentences. Focus on actionable changes.`,
+      `Weekly Performance:
 - Revenue Goal: $${config.business.targetWeeklyRevenue}
 - Actual Profit: $${kpi.totalProfit.toFixed(2)}
 - Target Achievement: ${performancePercent.toFixed(1)}%
@@ -133,11 +116,8 @@ Respond with a JSON array of indices (0-based) of deals you approve.`,
 - Best Channel: ${Object.entries(kpi.channelBreakdown).sort((a, b) => b[1].profit - a[1].profit)[0][0]}
 
 What should we do?`,
-        },
-      ],
-    });
-
-    const recommendation = message.content[0].type === 'text' ? message.content[0].text : 'Keep current strategy';
+      500
+    ) || 'Keep current strategy';
 
     agentDecisionQueries.insert({
       agent: 'ceo',
