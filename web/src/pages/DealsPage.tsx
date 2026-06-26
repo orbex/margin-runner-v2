@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercent } from '@/lib/utils';
-import { dealsService, onDealApproved, onDealDiscovered } from '@/services/api';
+import { dealsService } from '@/services/api';
 import { ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react';
 
 interface Deal {
