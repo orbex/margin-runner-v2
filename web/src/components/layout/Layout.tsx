@@ -9,6 +9,7 @@ import {
   FileText,
   Home,
   Zap,
+  Settings,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -24,6 +25,7 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/inventory', label: 'Inventory', icon: Package },
     { path: '/sales', label: 'Sales', icon: TrendingUp },
     { path: '/reports', label: 'Reports', icon: FileText },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
   return (

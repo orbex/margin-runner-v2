@@ -45,6 +45,10 @@ class OllamaProvider implements LLMProvider {
 
 let _provider: LLMProvider | null = null;
 
+export function resetLLMProvider(): void {
+  _provider = null;
+}
+
 export function getLLMProvider(): LLMProvider {
   if (_provider) return _provider;
 

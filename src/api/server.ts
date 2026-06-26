@@ -7,6 +7,8 @@ import { ceoAgent } from '../agents/ceoAgent.js';
 import { operationsAgent } from '../agents/operationsAgent.js';
 import { dealQueries, inventoryQueries, listingQueries, saleQueries } from '../db/queries.js';
 import { config } from '../config.js';
+import { loadSettings, saveSettings, getPublicSettings, AppSettings } from '../settings.js';
+import { resetLLMProvider } from '../llm/provider.js';
 
 export interface ApiContext {
   app: Express;
@@ -260,6 +262,64 @@ export function createApiServer(): ApiContext {
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to trigger reconciliation' });
+    }
+  });
+
+  app.get('/api/settings', (_req: Request, res: Response) => {
+    try {
+      const settings = loadSettings();
+      res.json(getPublicSettings(settings));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to load settings' });
+    }
+  });
+
+  app.post('/api/settings', (req: Request, res: Response) => {
+    try {
+      const current = loadSettings();
+      const incoming: AppSettings = req.body;
+
+      // Preserve stored API key if the browser sent back the masked placeholder
+      const claudeApiKey =
+        incoming.llm.claudeApiKey && incoming.llm.claudeApiKey !== '••••••••'
+          ? incoming.llm.claudeApiKey
+          : current.llm.claudeApiKey;
+
+      const updated: AppSettings = {
+        llm: {
+          provider: incoming.llm.provider,
+          claudeModel: incoming.llm.claudeModel,
+          claudeApiKey,
+          ollamaBaseUrl: incoming.llm.ollamaBaseUrl,
+          ollamaModel: incoming.llm.ollamaModel,
+        },
+        business: {
+          targetWeeklyRevenue: Number(incoming.business.targetWeeklyRevenue),
+          minMarginPercent: Number(incoming.business.minMarginPercent),
+        },
+        scraping: {
+          maxConcurrentRequests: Number(incoming.scraping.maxConcurrentRequests),
+          requestTimeoutMs: Number(incoming.scraping.requestTimeoutMs),
+          retryAttempts: Number(incoming.scraping.retryAttempts),
+        },
+      };
+
+      saveSettings(updated);
+
+      // Apply LLM settings immediately without restart
+      config.llm.provider = updated.llm.provider;
+      config.llm.claudeModel = updated.llm.claudeModel;
+      config.llm.ollamaBaseUrl = updated.llm.ollamaBaseUrl;
+      config.llm.ollamaModel = updated.llm.ollamaModel;
+      if (claudeApiKey) config.claude.apiKey = claudeApiKey;
+      config.business.targetWeeklyRevenue = updated.business.targetWeeklyRevenue;
+      config.business.minMarginPercent = updated.business.minMarginPercent;
+      resetLLMProvider();
+
+      res.json({ success: true, settings: getPublicSettings(updated) });
+    } catch (error) {
+      console.error('Settings save error:', error);
+      res.status(500).json({ error: 'Failed to save settings' });
     }
   });
 

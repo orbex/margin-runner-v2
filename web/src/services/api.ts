@@ -40,4 +40,9 @@ export const agentsService = {
   triggerReconciliation: () => api.post('/agents/reconcile'),
 };
 
+export const settingsService = {
+  getSettings: () => api.get('/settings'),
+  saveSettings: (settings: any) => api.post('/settings', settings),
+};
+
 export default api;
