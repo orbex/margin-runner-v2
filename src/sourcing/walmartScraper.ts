@@ -31,19 +31,19 @@ const BASE_HEADERS = {
 // Clearance category page URLs to scrape. Add / remove as needed.
 const CLEARANCE_URLS: Array<{ url: string; category: string }> = [
   {
-    url: "https://www.walmart.com/browse/electronics/clearance/3944_1229722_1229760",
+    url: "https://www.walmart.com/cp/electronics/3944?povid=GlobalNav_rWeb_ETS_techelectronics_electronics",
     category: "Electronics",
   },
   {
-    url: "https://www.walmart.com/browse/home/clearance/4044_133032_2072648",
+    url: "https://www.walmart.com/cp/home/4044?povid=GlobalNav_rWeb_HomeGardenTools_Department_ShopAllHome",
     category: "Home",
   },
   {
-    url: "https://www.walmart.com/browse/toys/clearance/4171_1249140_1246336",
+    url: "https://www.walmart.com/cp/toys/4171?povid=GlobalNav_rweb_ToysGames_ShopAllToys",
     category: "Toys",
   },
   {
-    url: "https://www.walmart.com/browse/clothing/clearance/5438_1045801",
+    url: "https://www.walmart.com/cp/clothing/5438?povid=GlobalNav_rWeb_ClothingShoesAccessories_Fashion",
     category: "Clothing",
   },
 ];
@@ -159,7 +159,7 @@ export async function scrapeWalmartClearance(): Promise<RawDeal[]> {
 
   for (const { url, category } of CLEARANCE_URLS) {
     for (let page = 1; page <= MAX_PAGES; page++) {
-      const pageUrl = page === 1 ? url : `${url}?page=${page}&affinityOverride=default`;
+      const pageUrl = page === 1 ? url : `${url}&page=${page}&affinityOverride=default`;
 
       try {
         console.log(`[walmart] Fetching ${category} page ${page}…`);
