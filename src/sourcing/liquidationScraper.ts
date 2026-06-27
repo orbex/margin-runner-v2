@@ -80,6 +80,52 @@ async function extractLots(page: Page, category: string): Promise<AuctionLot[]> 
     console.log(`[liquidation] DEBUG: Saved page HTML to ${debugPath}`);
     console.log(`[liquidation] DEBUG: Page title: "${await page.title()}"`);
     console.log(`[liquidation] DEBUG: HTML length: ${html.length} chars`);
+
+    // Dump the first auction link's parent card so we can identify real selectors
+    const cardInfo = await page.evaluate(() => {
+      // Find any anchor pointing to an individual auction
+      const auctionLink = document.querySelector(
+        "a[href*='/auction/view'], a[href*='/lot/'], a[href*='/auction/detail'], " +
+        "a[href*='/auction/']:not([href='/auction/search'])"
+      ) as HTMLAnchorElement | null;
+
+      if (!auctionLink) {
+        // Fall back: show all unique class names on the page to help identify containers
+        const allClasses = new Set<string>();
+        document.querySelectorAll("[class]").forEach(el => {
+          el.className.split(/\s+/).forEach(c => { if (c) allClasses.add(c); });
+        });
+        return {
+          found: false,
+          href: null,
+          cardHTML: null,
+          allClasses: [...allClasses].slice(0, 80).join(", "),
+        };
+      }
+
+      // Walk up to find a meaningful card container (not body/html)
+      let container: Element = auctionLink;
+      for (let i = 0; i < 5; i++) {
+        if (container.parentElement && container.parentElement.tagName !== "BODY") {
+          container = container.parentElement;
+        }
+      }
+
+      return {
+        found: true,
+        href: auctionLink.href,
+        cardHTML: container.outerHTML.slice(0, 2000),
+        allClasses: null,
+      };
+    });
+
+    if (cardInfo.found) {
+      console.log(`[liquidation] DEBUG: Found auction link → ${cardInfo.href}`);
+      console.log(`[liquidation] DEBUG: Card HTML sample:\n${cardInfo.cardHTML}`);
+    } else {
+      console.log("[liquidation] DEBUG: No auction links found on page.");
+      console.log(`[liquidation] DEBUG: All CSS classes on page:\n${cardInfo.allClasses}`);
+    }
   }
 
   return page.evaluate(
