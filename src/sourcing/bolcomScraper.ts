@@ -16,13 +16,13 @@ import { type RawDeal } from "./dealScorer.js";
 const STOREFRONTS = [
   {
     base: "https://www.bol.com",
-    dealsUrl: "https://www.bol.com/nl/nl/l/aanbiedingen/",
+    dealsUrl: "https://www.bol.com/nl/nl/deals/",
     country: "NL",
     lang: "nl-NL",
   },
   {
     base: "https://www.bol.com",
-    dealsUrl: "https://www.bol.com/be/nl/l/aanbiedingen/",
+    dealsUrl: "https://www.bol.com/be/nl/deals/",
     country: "BE",
     lang: "nl-BE",
   },
