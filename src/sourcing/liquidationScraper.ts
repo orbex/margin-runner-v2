@@ -207,6 +207,13 @@ export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
     for (const { dimension, label } of AUCTION_CATEGORIES) {
       const lots = await scrapeCategory(page, dimension, label);
 
+      if (DEBUG && lots.length > 0) {
+        console.log(`[liquidation] DEBUG: First 3 lots from ${label}:`);
+        lots.slice(0, 3).forEach(l =>
+          console.log(`  bid=$${l.currentBid} retail=$${l.retailValue} title="${l.title.slice(0, 60)}"`)
+        );
+      }
+
       for (const lot of lots) {
         const deal = lotToDeal(lot);
         if (deal) allDeals.push(deal);
@@ -217,6 +224,10 @@ export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
     }
   } finally {
     await browser.close();
+  }
+
+  if (DEBUG && allDeals.length === 0) {
+    console.log("[liquidation] DEBUG: No qualifying deals. Run without head -30 to see full output.");
   }
 
   const seen = new Set<string>();
