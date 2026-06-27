@@ -303,11 +303,9 @@ export function createApiServer(): ApiContext {
           requestTimeoutMs: Number(incoming.scraping.requestTimeoutMs),
           retryAttempts: Number(incoming.scraping.retryAttempts),
         },
+        // Preserve scraper enabled/disabled states — POST /settings doesn't touch them
+        scrapers: { ...DEFAULT_SCRAPER_STATES, ...(current.scrapers ?? {}) },
       };
-
-      // Preserve scraper states from existing settings (POST /settings doesn't touch scrapers)
-      const existing = loadSettings();
-      updated.scrapers = existing.scrapers ?? { ...DEFAULT_SCRAPER_STATES };
 
       saveSettings(updated);
 
