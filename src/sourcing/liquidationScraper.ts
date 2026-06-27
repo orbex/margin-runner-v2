@@ -75,8 +75,11 @@ interface AuctionLot {
 async function extractLots(page: Page, category: string): Promise<AuctionLot[]> {
   if (DEBUG) {
     const html = await page.content();
-    fs.writeFileSync("liquidation-debug.html", html, "utf-8");
-    console.log("[liquidation] DEBUG: Saved page HTML to liquidation-debug.html");
+    const debugPath = "web/dist/liquidation-debug.html";
+    fs.writeFileSync(debugPath, html, "utf-8");
+    console.log(`[liquidation] DEBUG: Saved page HTML to ${debugPath}`);
+    console.log(`[liquidation] DEBUG: Page title: "${await page.title()}"`);
+    console.log(`[liquidation] DEBUG: HTML length: ${html.length} chars`);
   }
 
   return page.evaluate(
@@ -168,8 +171,9 @@ async function scrapeCategory(
     try {
       console.log(`[liquidation] Fetching ${label} page ${p}…`);
 
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 30_000 });
-      await sleep(2000);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      // Give JS time to render the auction grid
+      await sleep(4000);
 
       const pageLots = await extractLots(page, label);
 
@@ -224,6 +228,7 @@ export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
 
     // Dismiss cookie banner on homepage first
     await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await sleep(2000);
     const cookieBtn = await page.$("[id*=accept], [class*=accept-cookie], #onetrust-accept-btn-handler");
     if (cookieBtn) await cookieBtn.click();
     await sleep(1000);
