@@ -10,6 +10,7 @@
 
 import puppeteer, { type Browser, type Page } from "puppeteer";
 import { type RawDeal } from "./dealScorer.js";
+import { lookupEbayPrice } from "./ebayPriceLookup.js";
 import fs from "fs";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -212,6 +213,19 @@ export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
 
     for (const { dimension, label } of AUCTION_CATEGORIES) {
       const lots = await scrapeCategory(page, dimension, label);
+
+      // Enrich lots missing a retail price via eBay Browse API
+      const noRetail = lots.filter(l => l.retailValue === 0);
+      if (noRetail.length > 0) {
+        console.log(`[liquidation] Enriching ${noRetail.length} lots with eBay price lookup…`);
+        for (const lot of noRetail) {
+          lot.retailValue = await lookupEbayPrice(lot.title);
+          if (lot.retailValue > 0) {
+            console.log(`[liquidation]   eBay price: $${lot.retailValue} for "${lot.title.slice(0, 50)}"`);
+          }
+          await sleep(500); // stay well within rate limits
+        }
+      }
 
       if (DEBUG && lots.length > 0) {
         console.log(`[liquidation] DEBUG: First 3 lots from ${label}:`);

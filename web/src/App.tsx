@@ -6,6 +6,7 @@ import InventoryPage from './pages/InventoryPage';
 import SalesPage from './pages/SalesPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import ScrapersPage from './pages/ScrapersPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/scrapers" element={<ScrapersPage />} />
         </Routes>
       </Layout>
     </Router>

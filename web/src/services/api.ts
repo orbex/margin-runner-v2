@@ -45,4 +45,11 @@ export const settingsService = {
   saveSettings: (settings: any) => api.post('/settings', settings),
 };
 
+export const scrapersService = {
+  getStates: () => api.get('/scrapers'),
+  toggle: (id: string) => api.post(`/scrapers/${id}/toggle`),
+  run: (id: string) => api.post(`/scrapers/${id}/run`),
+  getRunning: () => api.get('/scrapers/running'),
+};
+
 export default api;

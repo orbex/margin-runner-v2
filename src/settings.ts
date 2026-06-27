@@ -22,7 +22,17 @@ export interface AppSettings {
     requestTimeoutMs: number;
     retryAttempts: number;
   };
+  scrapers: Record<string, boolean>;
 }
+
+export const DEFAULT_SCRAPER_STATES: Record<string, boolean> = {
+  walmart: true,
+  target: true,
+  liquidation: true,
+  restposten: true,
+  bolcom: true,
+  tweedehands: true,
+};
 
 const DEFAULTS: AppSettings = {
   llm: {
@@ -41,6 +51,7 @@ const DEFAULTS: AppSettings = {
     requestTimeoutMs: 15000,
     retryAttempts: 3,
   },
+  scrapers: { ...DEFAULT_SCRAPER_STATES },
 };
 
 export function loadSettings(): AppSettings {

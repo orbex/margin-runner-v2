@@ -7,7 +7,8 @@ import { ceoAgent } from '../agents/ceoAgent.js';
 import { operationsAgent } from '../agents/operationsAgent.js';
 import { dealQueries, inventoryQueries, listingQueries, saleQueries } from '../db/queries.js';
 import { config } from '../config.js';
-import { loadSettings, saveSettings, getPublicSettings, AppSettings } from '../settings.js';
+import { loadSettings, saveSettings, getPublicSettings, AppSettings, DEFAULT_SCRAPER_STATES } from '../settings.js';
+import { scraper as scraperInstance } from '../sourcing/scrapers.js';
 import { resetLLMProvider } from '../llm/provider.js';
 
 export interface ApiContext {
@@ -304,6 +305,10 @@ export function createApiServer(): ApiContext {
         },
       };
 
+      // Preserve scraper states from existing settings (POST /settings doesn't touch scrapers)
+      const existing = loadSettings();
+      updated.scrapers = existing.scrapers ?? { ...DEFAULT_SCRAPER_STATES };
+
       saveSettings(updated);
 
       // Apply LLM settings immediately without restart
@@ -321,6 +326,71 @@ export function createApiServer(): ApiContext {
       console.error('Settings save error:', error);
       res.status(500).json({ error: 'Failed to save settings' });
     }
+  });
+
+  // ── Scraper enable/disable ────────────────────────────────────────────────
+  app.get('/api/scrapers', (req: Request, res: Response) => {
+    const settings = loadSettings();
+    const states = { ...DEFAULT_SCRAPER_STATES, ...settings.scrapers };
+    res.json({ scrapers: states });
+  });
+
+  app.post('/api/scrapers/:id/toggle', (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!(id in DEFAULT_SCRAPER_STATES)) {
+        res.status(400).json({ error: `Unknown scraper: ${id}` });
+        return;
+      }
+      const settings = loadSettings();
+      const states = { ...DEFAULT_SCRAPER_STATES, ...settings.scrapers };
+      states[id] = !states[id];
+      settings.scrapers = states;
+      saveSettings(settings);
+      res.json({ id, enabled: states[id] });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to toggle scraper' });
+    }
+  });
+
+  // Run a single scraper on demand; streams result count back
+  const runningScrapers = new Set<string>();
+
+  app.post('/api/scrapers/:id/run', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (runningScrapers.has(id)) {
+      res.status(409).json({ error: 'Already running' });
+      return;
+    }
+
+    const methodMap: Record<string, () => Promise<import('../sourcing/dealScorer.js').RawDeal[]>> = {
+      walmart:     () => scraperInstance.scrapeWalmartClearance(),
+      target:      () => scraperInstance.scrapeTargetClearance(),
+      liquidation: () => scraperInstance.scrapeLiquidationSites(),
+      restposten:  () => scraperInstance.scrapeRestposten(),
+      bolcom:      () => scraperInstance.scrapeBolcom(),
+      tweedehands: () => scraperInstance.scrapeTweedehands(),
+    };
+
+    const fn = methodMap[id];
+    if (!fn) { res.status(400).json({ error: `Unknown scraper: ${id}` }); return; }
+
+    runningScrapers.add(id);
+    res.json({ started: true });
+
+    try {
+      const deals = await fn();
+      io.emit('scraper-done', { id, dealCount: deals.length });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      io.emit('scraper-error', { id, error: msg });
+    } finally {
+      runningScrapers.delete(id);
+    }
+  });
+
+  app.get('/api/scrapers/running', (req: Request, res: Response) => {
+    res.json({ running: [...runningScrapers] });
   });
 
   app.get('*', (req: Request, res: Response) => {

@@ -10,6 +10,7 @@ import {
   Home,
   Zap,
   Settings,
+  Globe2,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -25,6 +26,7 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/inventory', label: 'Inventory', icon: Package },
     { path: '/sales', label: 'Sales', icon: TrendingUp },
     { path: '/reports', label: 'Reports', icon: FileText },
+    { path: '/scrapers', label: 'Scrapers', icon: Globe2 },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -66,7 +68,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="border-b bg-white dark:bg-slate-950 px-8 py-4 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
+              {navItems.find(item => item.path === location.pathname)?.label ?? 'Dashboard'}
             </h2>
             <div className="flex items-center gap-4">
               <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
