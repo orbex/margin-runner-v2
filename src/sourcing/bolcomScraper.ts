@@ -35,13 +35,24 @@ const STOREFRONTS = [
 const MIN_DISCOUNT_PCT = 25;
 const MAX_PAGES = 2;
 
+// Parse Dutch price format: "49,95" → 49.95, "1.299,00" → 1299
 function parseEuroPrice(text: string): number {
-  // Handles "€ 29,99" and "29.99" and "1.299,00"
-  const cleaned = text
+  const cleaned = text.trim()
     .replace(/[€\s]/g, "")
-    .replace(/\.(?=\d{3})/g, "")  // remove thousands separator dots
+    .replace(/\.(?=\d{3})/g, "")   // strip thousands dots
     .replace(",", ".");
   return parseFloat(cleaned) || 0;
+}
+
+// Parse the bol.com accessible price span:
+// "De prijs van dit product is '44' euro en '99' cent" → 44.99
+function parseAccessiblePrice(text: string): number {
+  const m = text.match(/'(\d+)'\s+euro\s+en\s+'(\d+)'\s+cent/i);
+  if (m) return parseFloat(`${m[1]}.${m[2]}`);
+  // fallback: just grab first number with optional comma-decimal
+  const m2 = text.match(/(\d+)[,.](\d{2})/);
+  if (m2) return parseFloat(`${m2[1]}.${m2[2]}`);
+  return 0;
 }
 
 async function scrapeBolStorefront(
@@ -69,38 +80,47 @@ async function scrapeBolStorefront(
       const { data } = await axios.get(url, { headers, timeout: 15_000 });
       const $ = cheerio.load(data);
 
-      // Bol.com product cards use data-test selectors
-      const cards = $("[data-test='product-card'], .product-item--row, .js_item_root, li.product-item");
+      // Each product has a title link: <a href="/nl/nl/p/..."><h2>…</h2></a>
+      const titleLinks = $(`a[href*="/${country.toLowerCase()}/p/"] h2`).toArray();
 
-      if (cards.length === 0) {
+      if (titleLinks.length === 0) {
         console.log(`[bolcom] No items on ${country} page ${page}`);
         break;
       }
 
-      cards.each((_, el) => {
+      for (const h2El of titleLinks) {
         try {
-          const title =
-            $(el).find("[data-test='product-title'], .product-title, h3, h4").first().text().trim();
-          if (!title) return;
+          const $h2 = $(h2El);
+          const title = $h2.text().trim();
+          if (!title) continue;
 
-          const href = $(el).find("a[data-test='product-title-link'], a").first().attr("href") ?? "";
+          // The <a> wrapping the h2 carries the product URL
+          const $link = $h2.closest("a");
+          const href = $link.attr("href") ?? "";
           const sourceUrl = href.startsWith("http") ? href : `${base}${href}`;
 
-          const priceEl = $(el).find("[data-test='price-value'], .prijs-sales, .buy-block__price");
-          const retailEl = $(el).find("[data-test='from-price'], .prijs-was, .buy-block__list-price");
+          // Walk up to the card root — the div that contains both the image and the price block
+          const $card = $link.closest("div[class*='grid-cols']").parent().parent();
 
-          const acquisitionCost = parseEuroPrice(priceEl.first().text());
-          const retailPrice = parseEuroPrice(retailEl.first().text());
+          // Current (outlet) price — bol.com puts the price in an accessible hidden span:
+          // "De prijs van dit product is '44' euro en '99' cent"
+          const priceSpanText = $card.find("span").filter((_, el) =>
+            $(el).text().includes("euro en")
+          ).first().text();
+          const acquisitionCost = parseAccessiblePrice(priceSpanText);
 
-          if (!acquisitionCost || !retailPrice) return;
-          if (retailPrice <= acquisitionCost) return;
+          // Retail (was) price — in a <s aria-hidden="true"> strikethrough element
+          const retailText = $card.find("s[aria-hidden='true']").first().text();
+          const retailPrice = parseEuroPrice(retailText);
+
+          if (!acquisitionCost || !retailPrice) continue;
+          if (retailPrice <= acquisitionCost) continue;
 
           const discountPct = ((retailPrice - acquisitionCost) / retailPrice) * 100;
-          if (discountPct < MIN_DISCOUNT_PCT) return;
+          if (discountPct < MIN_DISCOUNT_PCT) continue;
 
-          const imgSrc =
-            $(el).find("img[data-test='product-image'], img.product-image").first().attr("src") ??
-            $(el).find("img").first().attr("src");
+          const imgSrc = $card.find("img[src*='media.s-bol.com']").first().attr("src")
+            ?? $card.find("img").first().attr("src");
 
           deals.push({
             title,
@@ -113,7 +133,7 @@ async function scrapeBolStorefront(
         } catch {
           // skip malformed card
         }
-      });
+      }
 
       console.log(`[bolcom] ${country} page ${page}: ${deals.length} deals so far`);
       await sleep(1500 + Math.random() * 1000);
