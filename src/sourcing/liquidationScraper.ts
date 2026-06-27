@@ -16,13 +16,11 @@ import fs from "fs";
 
 const BASE_URL = "https://www.liquidation.com";
 
-// Category dimension IDs from the search URL (?searchparam_dimension=XXXXX)
-// Add more by browsing the site and noting the dimension param in the URL
+// Only scrape Packages (10901). Pallets/Truckloads/Large Items are bulk lots
+// not suitable for individual resale. Add more package-level dimensions here
+// by browsing liquidation.com and noting the searchparam_dimension in the URL.
 const AUCTION_CATEGORIES = [
-  { dimension: "10901", label: "General Merchandise" },
-  { dimension: "10902", label: "Electronics" },
-  { dimension: "10903", label: "Home & Garden" },
-  { dimension: "10904", label: "Apparel" },
+  { dimension: "10901", label: "Packages" },
 ];
 
 const MIN_DISCOUNT_PCT = 40;
@@ -110,8 +108,17 @@ async function extractLots(page: Page, category: string): Promise<AuctionLot[]> 
           return m ? parseFloat(m[1].replace(/,/g, "")) : 0;
         };
 
+        // Parse MSRP/retail hints embedded in the title text
+        // e.g. "Dog Bed - MSRP $119", "Furniture Kit - MSRP $1,300", "Retail Value $500"
+        const parseMsrpFromTitle = (text: string): number => {
+          const m = text.match(/(?:MSRP|Retail(?:\s+Value)?|RV|Est\.?\s+Retail)[:\s]+\$\s*([\d,]+(?:\.\d{1,2})?)/i);
+          return m ? parseFloat(m[1].replace(/,/g, "")) : 0;
+        };
+
         const currentBid = parseDollar(card.querySelector("li.current-bid"));
-        const retailValue = parseDollar(card.querySelector("li.est-retail"));
+        const listedRetail = parseDollar(card.querySelector("li.est-retail"));
+        const titleRetail = listedRetail === 0 ? parseMsrpFromTitle(title) : 0;
+        const retailValue = listedRetail || titleRetail;
 
         // Image
         const imgEl = card.querySelector("img.img-responsive") as HTMLImageElement | null;
