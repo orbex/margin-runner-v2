@@ -13,16 +13,20 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { type RawDeal } from "./dealScorer.js";
 
+// Outlet sorted by popularity (wishListRank1), paginated via &page=N
+const OUTLET_BASE_NL = "https://www.bol.com/nl/nl/ra/outlet/392102/?sort=wishListRank1&page=";
+const OUTLET_BASE_BE = "https://www.bol.com/be/nl/ra/outlet/392102/?sort=wishListRank1&page=";
+
 const STOREFRONTS = [
   {
     base: "https://www.bol.com",
-    dealsUrl: "https://www.bol.com/nl/nl/deals/",
+    dealsUrl: OUTLET_BASE_NL,
     country: "NL",
     lang: "nl-NL",
   },
   {
     base: "https://www.bol.com",
-    dealsUrl: "https://www.bol.com/be/nl/deals/",
+    dealsUrl: OUTLET_BASE_BE,
     country: "BE",
     lang: "nl-BE",
   },
@@ -57,7 +61,8 @@ async function scrapeBolStorefront(
   };
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const url = page === 1 ? dealsUrl : `${dealsUrl}?page=${page}`;
+    // dealsUrl already ends with &page= or ?page= — just append the number
+    const url = `${dealsUrl}${page}`;
 
     try {
       console.log(`[bolcom] Fetching ${country} deals page ${page}…`);
