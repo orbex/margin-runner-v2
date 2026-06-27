@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run build:web",
+    "build:server": "tsc",
+    "build:web": "cd web && npm run build",
     "start": "node dist/index.js",
     "seed": "tsx src/db/seed.ts",
     "test": "vitest"
