@@ -85,14 +85,14 @@ async function extractLots(page: Page, category: string): Promise<AuctionLot[]> 
     const cardInfo = await page.evaluate(() => {
       // Collect all unique link href patterns (first 60 chars each, deduplicated by pattern)
       const patterns = new Map<string, string>();
-      document.querySelectorAll("a[href]").forEach(a => {
+      Array.from(document.querySelectorAll("a[href]")).forEach(a => {
         const href = (a as HTMLAnchorElement).href;
         const key = href.replace(/\d{4,}/g, "NNNN").slice(0, 80);
         if (!patterns.has(key)) patterns.set(key, href);
       });
 
       // Look for links with long numeric IDs — these are typically individual lot pages
-      const lotLink = [...document.querySelectorAll("a[href]")]
+      const lotLink = Array.from(document.querySelectorAll("a[href]"))
         .find(a => /\/\d{6,}/.test((a as HTMLAnchorElement).href) &&
                    !(a as HTMLAnchorElement).href.includes("search")) as HTMLAnchorElement | null;
 
