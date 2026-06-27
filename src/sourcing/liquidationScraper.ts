@@ -1,38 +1,33 @@
 /**
  * Liquidation.com Scraper
  *
- * Strategy: Liquidation.com is a fully JS-rendered SPA. We use Puppeteer in
- * headless mode to load auction/manifest listing pages, wait for the React
- * grid to hydrate, then extract auction data.
+ * Uses Puppeteer to load JS-rendered auction search pages.
+ * URL format: /auction/search?flag=new&searchparam_dimension=XXXXX
  *
- * Key differences from the retail scrapers:
- *  - Prices are "current bid" + "retail value", not static clearance prices
- *  - We map auction lots to RawDeal[] with clearancePrice = current bid
- *    and retailPrice = manifest retail value
- *  - The scraper skips lots with < 5 items (too small for resale)
- *
- * Returns RawDeal[] matching the existing project interface.
+ * On first run with DEBUG_LIQUIDATION=true, dumps raw HTML to
+ * liquidation-debug.html so you can inspect the real DOM selectors.
  */
 
 import puppeteer, { type Browser, type Page } from "puppeteer";
 import { type RawDeal } from "./dealScorer.js";
+import fs from "fs";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const BASE_URL = "https://www.liquidation.com";
 
-// Category listing pages to scrape
+// Category dimension IDs from the search URL (?searchparam_dimension=XXXXX)
+// Add more by browsing the site and noting the dimension param in the URL
 const AUCTION_CATEGORIES = [
-  { path: "/auction/electronics", label: "Electronics" },
-  { path: "/auction/home", label: "Home" },
-  { path: "/auction/toys-games", label: "Toys" },
-  { path: "/auction/general-merchandise", label: "General Merchandise" },
+  { dimension: "10901", label: "General Merchandise" },
+  { dimension: "10902", label: "Electronics" },
+  { dimension: "10903", label: "Home & Garden" },
+  { dimension: "10904", label: "Apparel" },
 ];
 
-// Only surface lots where bid is at least this % below retail
-const MIN_DISCOUNT_PCT = 40; // liquidation lots are cheap; raise bar higher
-const MIN_LOT_SIZE = 5;      // units in lot
-const MAX_PAGES = 2;         // pages per category
+const MIN_DISCOUNT_PCT = 40;
+const MAX_PAGES = 2;
+const DEBUG = process.env.DEBUG_LIQUIDATION === "true";
 
 // ── Browser helpers ───────────────────────────────────────────────────────────
 
@@ -51,7 +46,6 @@ async function launchBrowser(): Promise<Browser> {
 async function newStealthPage(browser: Browser): Promise<Page> {
   const page = await browser.newPage();
 
-  // Spoof navigator.webdriver to pass basic bot checks
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
   });
@@ -61,7 +55,7 @@ async function newStealthPage(browser: Browser): Promise<Page> {
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
   );
 
-  await page.setViewport({ width: 1280, height: 900 });
+  await page.setViewport({ width: 1440, height: 900 });
 
   return page;
 }
@@ -75,97 +69,79 @@ interface AuctionLot {
   retailValue: number;
   imageUrl?: string;
   lotUrl: string;
-  endsAt?: string;
-  lotSize?: number;
   category: string;
 }
 
-/**
- * Extracts auction lot data from the current listing page.
- * Liquidation renders lots inside `.auction-list-item` cards.
- * This selector has been stable since 2023 but may need updating.
- */
 async function extractLots(page: Page, category: string): Promise<AuctionLot[]> {
+  if (DEBUG) {
+    const html = await page.content();
+    fs.writeFileSync("liquidation-debug.html", html, "utf-8");
+    console.log("[liquidation] DEBUG: Saved page HTML to liquidation-debug.html");
+  }
+
   return page.evaluate(
     (cat: string, baseUrl: string) => {
       const lots: AuctionLot[] = [];
 
-      // Attempt to find lot cards — the site uses a few different containers
-      const cards = document.querySelectorAll(
-        ".auction-item, .lot-card, [data-lot-id], .product-item"
-      );
+      // Liquidation.com search results — try multiple known container patterns
+      const cards = document.querySelectorAll([
+        ".auction-search-result",
+        ".search-result-item",
+        ".auction-card",
+        "[class*='auction-item']",
+        "[class*='result-item']",
+        "[class*='lot-card']",
+        // Fallback: any article or li with a link to /auction/
+        "article",
+        "li:has(a[href*='/auction/'])",
+      ].join(", "));
 
       cards.forEach((card) => {
         try {
-          // ID
-          const id =
-            card.getAttribute("data-lot-id") ??
-            card.getAttribute("data-auction-id") ??
-            card.querySelector("[data-lot-id]")?.getAttribute("data-lot-id") ??
-            "";
+          // Lot URL — anchor pointing to an individual auction
+          const linkEl = card.querySelector(
+            "a[href*='/auction/view'], a[href*='/lot/'], a[href*='/auction/detail']"
+          ) ?? card.closest("a[href*='/auction/']");
 
-          if (!id) return;
+          const href = (linkEl as HTMLAnchorElement)?.href ?? "";
+          if (!href) return;
+          const lotUrl = href.startsWith("http") ? href : `${baseUrl}${href}`;
+
+          // ID from URL
+          const idMatch = href.match(/\/(\d+)\/?(?:\?|$)/);
+          const id = idMatch?.[1] ?? href;
 
           // Title
           const titleEl = card.querySelector(
-            ".lot-title, .auction-title, h2, h3, .title"
+            "h2, h3, h4, [class*='title'], [class*='name'], [class*='description']"
           );
           const title = titleEl?.textContent?.trim() ?? "";
           if (!title) return;
 
           // Current bid
           const bidEl = card.querySelector(
-            ".current-bid .price, .bid-amount, [data-current-bid], .current-bid"
+            "[class*='current-bid'], [class*='bid-amount'], [class*='current_bid'], " +
+            "[class*='price']:not([class*='retail']):not([class*='msrp'])"
           );
-          const bidText = bidEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
-          const currentBid = parseFloat(bidText);
+          const bidText = bidEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
+          const currentBid = parseFloat(bidText) || 0;
 
-          // Retail value
+          // Retail / MSRP value
           const retailEl = card.querySelector(
-            ".retail-value .price, .retail-price, [data-retail-value], .msrp"
+            "[class*='retail'], [class*='msrp'], [class*='original-price'], " +
+            "[class*='market-value'], [class*='manifest-value']"
           );
-          const retailText = retailEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
-          const retailValue = parseFloat(retailText);
+          const retailText = retailEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
+          const retailValue = parseFloat(retailText) || 0;
 
           // Image
-          const imgEl = card.querySelector("img.lot-image, img.product-image, img");
+          const imgEl = card.querySelector("img");
           const imageUrl =
             (imgEl as HTMLImageElement)?.src ||
             imgEl?.getAttribute("data-src") ||
             undefined;
 
-          // Lot URL
-          const linkEl = card.querySelector("a.lot-link, a.title-link, a[href*='/lot/'], a[href*='/auction/']");
-          const href = (linkEl as HTMLAnchorElement)?.href ?? "";
-          const lotUrl = href.startsWith("http") ? href : `${baseUrl}${href}`;
-
-          // Ends-at
-          const timerEl = card.querySelector(
-            "[data-ends-at], .auction-ends, .time-remaining"
-          );
-          const endsAt =
-            timerEl?.getAttribute("data-ends-at") ??
-            timerEl?.getAttribute("datetime") ??
-            undefined;
-
-          // Lot size (number of units)
-          const sizeEl = card.querySelector(
-            "[data-qty], .lot-size, .qty, .unit-count"
-          );
-          const sizeText = sizeEl?.textContent?.replace(/[^0-9]/g, "") ?? "";
-          const lotSize = sizeText ? parseInt(sizeText, 10) : undefined;
-
-          lots.push({
-            id,
-            title,
-            currentBid,
-            retailValue,
-            imageUrl,
-            lotUrl,
-            endsAt,
-            lotSize,
-            category: cat,
-          });
+          lots.push({ id, title, currentBid, retailValue, imageUrl, lotUrl, category: cat });
         } catch {
           // Skip malformed cards
         }
@@ -178,35 +154,22 @@ async function extractLots(page: Page, category: string): Promise<AuctionLot[]> 
   );
 }
 
-/**
- * Navigate to a category page and collect lots across multiple pages.
- */
-async function scrapeCategoryPage(
+async function scrapeCategory(
   page: Page,
-  path: string,
+  dimension: string,
   label: string
 ): Promise<AuctionLot[]> {
   const lots: AuctionLot[] = [];
 
   for (let p = 1; p <= MAX_PAGES; p++) {
-    const url = `${BASE_URL}${path}?page=${p}&sort=ending_soon`;
+    const url =
+      `${BASE_URL}/auction/search?flag=new&searchparam_dimension=${dimension}&page=${p}`;
 
     try {
       console.log(`[liquidation] Fetching ${label} page ${p}…`);
 
       await page.goto(url, { waitUntil: "networkidle2", timeout: 30_000 });
-
-      // Wait for lot cards to appear
-      await page
-        .waitForSelector(".auction-item, .lot-card, .product-item", {
-          timeout: 10_000,
-        })
-        .catch(() => {
-          console.warn(`[liquidation] No lot cards found on ${url}`);
-        });
-
-      // Brief extra settle time for lazy-loaded images / bid prices
-      await sleep(1500);
+      await sleep(2000);
 
       const pageLots = await extractLots(page, label);
 
@@ -216,7 +179,7 @@ async function scrapeCategoryPage(
       }
 
       lots.push(...pageLots);
-      console.log(`[liquidation] ${label} page ${p}: ${pageLots.length} lots`);
+      console.log(`[liquidation] ${label} page ${p}: ${pageLots.length} lots found`);
 
       await sleep(2000 + Math.random() * 1000);
     } catch (err) {
@@ -240,8 +203,6 @@ function lotToDeal(lot: AuctionLot): RawDeal | null {
   );
   if (discountPct < MIN_DISCOUNT_PCT) return null;
 
-  if (lot.lotSize !== undefined && lot.lotSize < MIN_LOT_SIZE) return null;
-
   return {
     title: lot.title,
     sourceUrl: lot.lotUrl,
@@ -252,7 +213,7 @@ function lotToDeal(lot: AuctionLot): RawDeal | null {
   };
 }
 
-// ── Main scraper function ─────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
   const browser = await launchBrowser();
@@ -261,34 +222,27 @@ export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
   try {
     const page = await newStealthPage(browser);
 
-    // Accept cookies / dismiss modals on first load
-    await page.goto(`${BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 20_000,
-    });
+    // Dismiss cookie banner on homepage first
+    await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded", timeout: 20_000 });
     const cookieBtn = await page.$("[id*=accept], [class*=accept-cookie], #onetrust-accept-btn-handler");
     if (cookieBtn) await cookieBtn.click();
     await sleep(1000);
 
-    for (const { path, label } of AUCTION_CATEGORIES) {
-      const lots = await scrapeCategoryPage(page, path, label);
+    for (const { dimension, label } of AUCTION_CATEGORIES) {
+      const lots = await scrapeCategory(page, dimension, label);
 
       for (const lot of lots) {
         const deal = lotToDeal(lot);
         if (deal) allDeals.push(deal);
       }
 
-      console.log(
-        `[liquidation] ${label}: ${allDeals.length} total deals so far`
-      );
-
-      await sleep(3000 + Math.random() * 2000);
+      console.log(`[liquidation] ${label}: ${allDeals.length} qualifying deals so far`);
+      await sleep(2500 + Math.random() * 1500);
     }
   } finally {
     await browser.close();
   }
 
-  // Deduplicate by lot ID
   const seen = new Set<string>();
   return allDeals.filter((d) => {
     if (seen.has(d.sourceUrl)) return false;
