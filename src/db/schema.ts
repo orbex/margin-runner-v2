@@ -1,11 +1,11 @@
-import Database from 'better-sqlite3';
+import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DATABASE_URL || path.join(__dirname, '../../margin-runner.db');
 
-export const db = new Database(dbPath);
+export const db: DatabaseType = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 
 export function initializeSchema() {
