@@ -104,15 +104,14 @@ async function extractLots(page: Page, category: string): Promise<AuctionLot[]> 
         const linkEl = card.querySelector("a[href*='/auction/view?id=']") as HTMLAnchorElement | null;
         const lotUrl = linkEl?.href ?? `https://www.liquidation.com/auction/view?id=${id}`;
 
-        // Current bid — "Current Bid: $25.00"
-        const bidEl = card.querySelector("li.current-bid");
-        const bidText = bidEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
-        const currentBid = parseFloat(bidText) || 0;
+        // Extract the first dollar amount from an element's text e.g. "$1,234.56" → 1234.56
+        const parseDollar = (el: Element | null): number => {
+          const m = el?.textContent?.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/);
+          return m ? parseFloat(m[1].replace(/,/g, "")) : 0;
+        };
 
-        // Estimated retail — "Est. Retail: $119.96"
-        const retailEl = card.querySelector("li.est-retail");
-        const retailText = retailEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
-        const retailValue = parseFloat(retailText) || 0;
+        const currentBid = parseDollar(card.querySelector("li.current-bid"));
+        const retailValue = parseDollar(card.querySelector("li.est-retail"));
 
         // Image
         const imgEl = card.querySelector("img.img-responsive") as HTMLImageElement | null;
