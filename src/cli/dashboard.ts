@@ -1,9 +1,10 @@
 import * as readline from 'readline';
-import { dealQueries, inventoryQueries, listingQueries, saleQueries } from './db/queries.js';
-import { operationsAgent } from './agents/operationsAgent.js';
-import { sourcingAgent } from './agents/sourcingAgent.js';
-import { ceoAgent } from './agents/ceoAgent.js';
-import { config } from './config.js';
+import { dealQueries, inventoryQueries, listingQueries, saleQueries } from '../db/queries.js';
+import { operationsAgent } from '../agents/operationsAgent.js';
+import { sourcingAgent } from '../agents/sourcingAgent.js';
+import { ceoAgent } from '../agents/ceoAgent.js';
+import { config } from '../config.js';
+import type { Deal, Sale, Inventory } from '../types/index.js';
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -69,10 +70,10 @@ async function runSourcingCycleInteractive() {
     const deals = await sourcingAgent.discoverAndScoreManyDeals();
     console.log(`✓ Found ${deals.length} qualified deals\n`);
 
-    const topDeals = dealQueries.getByStatus('discovered').sort((a, b) => b.opportunityScore - a.opportunityScore).slice(0, 5);
+    const topDeals = dealQueries.getByStatus('discovered').sort((a: Deal, b: Deal) => b.opportunityScore - a.opportunityScore).slice(0, 5);
 
     console.log('Top 5 Deals:');
-    topDeals.forEach((deal, i) => {
+    topDeals.forEach((deal: Deal, i: number) => {
       console.log(`${i + 1}. ${deal.title}`);
       console.log(`   Profit: $${deal.profitEstimate.toFixed(2)} | Margin: ${deal.marginPercent.toFixed(1)}%`);
     });
@@ -92,7 +93,7 @@ async function displayDashboard() {
 
   const allDeals = dealQueries.getByStatus('discovered');
   console.log(`💰 Deals Available: ${allDeals.length}`);
-  console.log(`💵 Total Potential Profit: $${allDeals.reduce((sum, d) => sum + d.profitEstimate, 0).toFixed(2)}`);
+  console.log(`💵 Total Potential Profit: $${allDeals.reduce((sum: number, d: Deal) => sum + d.profitEstimate, 0).toFixed(2)}`);
 
   const inventory = inventoryQueries.getByLocation('at-home');
   console.log(`📦 Items In Stock: ${inventory.length}`);
@@ -104,7 +105,7 @@ async function displayDashboard() {
 
   const todaySales = saleQueries.getByDateRange(today, tomorrow);
   console.log(`🛒 Sales Today: ${todaySales.length}`);
-  console.log(`💵 Profit Today: $${todaySales.reduce((sum, s) => sum + s.profit, 0).toFixed(2)}`);
+  console.log(`💵 Profit Today: $${todaySales.reduce((sum: number, s: Sale) => sum + s.profit, 0).toFixed(2)}`);
 
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
@@ -113,7 +114,7 @@ async function displayDashboard() {
   weekEnd.setDate(weekEnd.getDate() + 7);
 
   const weekSales = saleQueries.getByDateRange(weekStart, weekEnd);
-  const weekProfit = weekSales.reduce((sum, s) => sum + s.profit, 0);
+  const weekProfit = weekSales.reduce((sum: number, s: Sale) => sum + s.profit, 0);
   console.log(`📊 Weekly Profit: $${weekProfit.toFixed(2)} / $${config.business.targetWeeklyRevenue}`);
 
   const percent = (weekProfit / config.business.targetWeeklyRevenue) * 100;
@@ -123,14 +124,14 @@ async function displayDashboard() {
 async function reviewTopDeals() {
   console.log('\n🎯 TOP DEALS\n');
 
-  const deals = dealQueries.getByStatus('discovered').sort((a, b) => b.opportunityScore - a.opportunityScore).slice(0, 10);
+  const deals = dealQueries.getByStatus('discovered').sort((a: Deal, b: Deal) => b.opportunityScore - a.opportunityScore).slice(0, 10);
 
   if (deals.length === 0) {
     console.log('No deals available.');
     return;
   }
 
-  deals.forEach((deal, i) => {
+  deals.forEach((deal: Deal, i: number) => {
     console.log(`${i + 1}. ${deal.title}`);
     console.log(`   Source: ${deal.sourceType}`);
     console.log(`   Cost: $${deal.acquisitionCost.toFixed(2)} → Market: $${deal.estimatedMarketPrice.toFixed(2)}`);
@@ -160,7 +161,7 @@ async function manageInventory() {
   }
 
   console.log('Current Inventory:');
-  inventory.forEach((item, i) => {
+  inventory.forEach((item: Inventory, i: number) => {
     console.log(`${i + 1}. SKU ${item.sku} - Status: ${item.status}`);
   });
 
@@ -201,7 +202,7 @@ async function showWeeklyReport() {
   console.log(`Target Achievement: ${((kpi.totalProfit / config.business.targetWeeklyRevenue) * 100).toFixed(1)}%\n`);
 
   console.log('By Channel:');
-  Object.entries(kpi.channelBreakdown).forEach(([channel, data]) => {
+  Object.entries(kpi.channelBreakdown).forEach(([channel, data]: [string, { profit: number; itemsSold: number; revenue: number }]) => {
     console.log(`  ${channel}: $${data.profit.toFixed(2)} profit (${data.itemsSold} items)`);
   });
 

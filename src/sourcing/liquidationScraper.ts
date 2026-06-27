@@ -291,8 +291,8 @@ export async function scrapeLiquidationDeals(): Promise<RawDeal[]> {
   // Deduplicate by lot ID
   const seen = new Set<string>();
   return allDeals.filter((d) => {
-    if (seen.has(d.sku)) return false;
-    seen.add(d.sku);
+    if (seen.has(d.sourceUrl)) return false;
+    seen.add(d.sourceUrl);
     return true;
   });
 }

@@ -46,7 +46,7 @@ export function createApiServer(): ApiContext {
     io.emit(event, data);
   };
 
-  app.get('/api/dashboard', (req: Request, res: Response) => {
+  app.get('/api/dashboard', async (req: Request, res: Response) => {
     try {
       const deals = dealQueries.getByStatus('discovered');
       const allDeals = dealQueries.getByStatus('discovered').length +
@@ -65,7 +65,7 @@ export function createApiServer(): ApiContext {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 7);
 
-      const weekKpi = operationsAgent.getWeeklyPerformance(weekStart, weekEnd);
+      const weekKpi = await operationsAgent.getWeeklyPerformance(weekStart, weekEnd);
 
       res.json({
         weeklyProfit: weekKpi?.totalProfit ?? 0,

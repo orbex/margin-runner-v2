@@ -20,7 +20,7 @@ export class Scheduler {
     const interval = config.scheduling.sourcingCheckIntervalMinutes;
     const cronExpression = `0 */${interval} * * * *`;
 
-    const job = cron.job(cronExpression, async () => {
+    const job = new cron.CronJob(cronExpression, async () => {
       console.log(`\n🔍 [${new Date().toISOString()}] Running scheduled sourcing check...`);
       try {
         const deals = await sourcingAgent.discoverAndScoreManyDeals();
@@ -41,7 +41,7 @@ export class Scheduler {
     const hour = config.scheduling.ceoReviewHour;
     const cronExpression = `0 ${hour} * * *`;
 
-    const job = cron.job(cronExpression, async () => {
+    const job = new cron.CronJob(cronExpression, async () => {
       console.log(`\n👔 [${new Date().toISOString()}] CEO Daily Review...`);
       try {
         const topDeals = dealQueries.getByStatus('discovered').sort((a, b) => b.opportunityScore - a.opportunityScore);
@@ -66,7 +66,7 @@ export class Scheduler {
     const hour = config.scheduling.operationsReconcileHour;
     const cronExpression = `0 ${hour} * * *`;
 
-    const job = cron.job(cronExpression, async () => {
+    const job = new cron.CronJob(cronExpression, async () => {
       console.log(`\n📊 [${new Date().toISOString()}] Operations Reconciliation...`);
       try {
         const report = await operationsAgent.generateDailyReport();

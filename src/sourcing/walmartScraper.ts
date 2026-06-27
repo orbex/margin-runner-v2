@@ -132,18 +132,6 @@ function parseProducts(
       if (discountPct < MIN_DISCOUNT_PCT) continue;
 
       // Stock
-      const availabilityStatus = (
-        (i.availabilityStatus as string) ?? ""
-      ).toLowerCase();
-      const availability: RawDeal["availability"] = availabilityStatus.includes(
-        "out"
-      )
-        ? "unknown"
-        : availabilityStatus.includes("limited") ||
-            availabilityStatus.includes("few")
-          ? "limited"
-          : "in_stock";
-
       const imageUrl = (
         safeGet(i, ["imageInfo", "thumbnailUrl"]) as string | undefined
       ) ?? undefined;
@@ -215,8 +203,8 @@ export async function scrapeWalmartClearance(): Promise<RawDeal[]> {
   // Deduplicate by SKU (same item can appear in multiple categories)
   const seen = new Set<string>();
   return allDeals.filter((d) => {
-    if (seen.has(d.sku)) return false;
-    seen.add(d.sku);
+    if (seen.has(d.sourceUrl)) return false;
+    seen.add(d.sourceUrl);
     return true;
   });
 }

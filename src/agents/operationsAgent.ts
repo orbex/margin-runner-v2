@@ -37,7 +37,8 @@ export class OperationsAgent {
 
   async createListing(inventory: Inventory, channel: 'ebay' | 'amazon-fba' | 'b2b', price: number): Promise<Listing> {
     const title = dealQueries.getById(inventory.dealId)?.title || 'Item';
-    const platformFee = config.business.platformFeePercent[channel];
+    const feeKey = channel === 'amazon-fba' ? 'amazonFba' : channel as 'ebay' | 'b2b';
+    const platformFee = config.business.platformFeePercent[feeKey];
     const netPrice = price * (1 - platformFee);
 
     const listing = listingQueries.insert({
@@ -72,7 +73,8 @@ export class OperationsAgent {
   }
 
   async recordSale(listing: Listing, finalPrice: number, shippingCost: number = 0): Promise<Sale> {
-    const platformFees = finalPrice * config.business.platformFeePercent[listing.channel];
+    const channelFeeKey = listing.channel === 'amazon-fba' ? 'amazonFba' : listing.channel as 'ebay' | 'b2b';
+    const platformFees = finalPrice * config.business.platformFeePercent[channelFeeKey];
     const inventory = inventoryQueries.getById(listing.inventoryId)!;
     const profit = finalPrice - platformFees - shippingCost - inventory.acquisitionCost;
 

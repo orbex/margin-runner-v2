@@ -224,8 +224,8 @@ export async function scrapeTargetClearance(): Promise<RawDeal[]> {
   // Deduplicate by TCIN
   const seen = new Set<string>();
   return allDeals.filter((d) => {
-    if (seen.has(d.sku)) return false;
-    seen.add(d.sku);
+    if (seen.has(d.sourceUrl)) return false;
+    seen.add(d.sourceUrl);
     return true;
   });
 }

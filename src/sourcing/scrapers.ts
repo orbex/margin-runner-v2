@@ -1,5 +1,11 @@
 import fetch from 'node-fetch';
 import { RawDeal } from './dealScorer.js';
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 import { scrapeWalmartClearance } from './walmartScraper.js';
 import { scrapeTargetClearance } from './targetScraper.js';
 import { scrapeLiquidationDeals } from './liquidationScraper.js';
@@ -40,7 +46,7 @@ export class PriceLookup {
         .map((item: any) => parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0'))
         .filter((p: number) => p > 0);
 
-      return prices.length > 0 ? Math.median(prices) : null;
+      return prices.length > 0 ? median(prices) : null;
     } catch (error) {
       return null;
     }
@@ -68,7 +74,7 @@ export class PriceLookup {
         .map(p => parseFloat(p.replace(/[$,]/g, '')))
         .filter(p => p > 5 && p < 10000);
 
-      return prices.length > 0 ? Math.median(prices) : null;
+      return prices.length > 0 ? median(prices) : null;
     } catch (error) {
       return null;
     }
@@ -136,16 +142,3 @@ export class Scraper {
 export const scraper = new Scraper();
 export const priceLookup = new PriceLookup();
 
-declare global {
-  interface Array<T> {
-    median(): T extends number ? number : never;
-  }
-}
-
-if (!Array.prototype.median) {
-  Array.prototype.median = function () {
-    const sorted = [...this].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  };
-}
