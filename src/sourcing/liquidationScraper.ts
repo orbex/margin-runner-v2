@@ -75,127 +75,57 @@ interface AuctionLot {
 async function extractLots(page: Page, category: string): Promise<AuctionLot[]> {
   if (DEBUG) {
     const html = await page.content();
-    const debugPath = "web/dist/liquidation-debug.html";
-    fs.writeFileSync(debugPath, html, "utf-8");
-    console.log(`[liquidation] DEBUG: Saved page HTML to ${debugPath}`);
-    console.log(`[liquidation] DEBUG: Page title: "${await page.title()}"`);
-    console.log(`[liquidation] DEBUG: HTML length: ${html.length} chars`);
-
-    // Dump all unique href patterns to identify individual lot URL format
-    const cardInfo = await page.evaluate(() => {
-      // Collect all unique link href patterns (first 60 chars each, deduplicated by pattern)
-      const patterns = new Map<string, string>();
-      Array.from(document.querySelectorAll("a[href]")).forEach(a => {
-        const href = (a as HTMLAnchorElement).href;
-        const key = href.replace(/\d{4,}/g, "NNNN").slice(0, 80);
-        if (!patterns.has(key)) patterns.set(key, href);
-      });
-
-      // Look for links with long numeric IDs — these are typically individual lot pages
-      const lotLink = Array.from(document.querySelectorAll("a[href]"))
-        .find(a => /\/\d{6,}/.test((a as HTMLAnchorElement).href) &&
-                   !(a as HTMLAnchorElement).href.includes("search")) as HTMLAnchorElement | null;
-
-      let cardHTML: string | null = null;
-      if (lotLink) {
-        let container: Element = lotLink;
-        for (let i = 0; i < 6; i++) {
-          if (container.parentElement && !["BODY","HTML"].includes(container.parentElement.tagName)) {
-            container = container.parentElement;
-          }
-        }
-        cardHTML = container.outerHTML.slice(0, 2000);
-      }
-
-      return {
-        lotHref: lotLink?.href ?? null,
-        cardHTML,
-        allPatterns: [...patterns.values()].slice(0, 30).join("\n"),
-      };
-    });
-
-    if (cardInfo.lotHref) {
-      console.log(`[liquidation] DEBUG: Lot link found → ${cardInfo.lotHref}`);
-      console.log(`[liquidation] DEBUG: Card HTML sample:\n${cardInfo.cardHTML}`);
-    } else {
-      console.log("[liquidation] DEBUG: No lot links found. All link patterns on page:");
-      console.log(cardInfo.allPatterns);
-    }
+    fs.writeFileSync("web/dist/liquidation-debug.html", html, "utf-8");
+    console.log(`[liquidation] DEBUG: title="${await page.title()}" length=${html.length}`);
   }
 
-  return page.evaluate(
-    (cat: string, baseUrl: string) => {
-      const lots: AuctionLot[] = [];
+  return page.evaluate((cat: string) => {
+    const lots: AuctionLot[] = [];
 
-      // Liquidation.com search results — try multiple known container patterns
-      const cards = document.querySelectorAll([
-        ".auction-search-result",
-        ".search-result-item",
-        ".auction-card",
-        "[class*='auction-item']",
-        "[class*='result-item']",
-        "[class*='lot-card']",
-        // Fallback: any article or li with a link to /auction/
-        "article",
-        "li:has(a[href*='/auction/'])",
-      ].join(", "));
+    // Each auction card is a div.grid-group-item containing div.thumbnail[data-id]
+    const cards = document.querySelectorAll("div.grid-group-item");
 
-      cards.forEach((card) => {
-        try {
-          // Lot URL — anchor pointing to an individual auction
-          const linkEl = card.querySelector(
-            "a[href*='/auction/view'], a[href*='/lot/'], a[href*='/auction/detail']"
-          ) ?? card.closest("a[href*='/auction/']");
+    cards.forEach((card) => {
+      try {
+        const thumbnail = card.querySelector(".thumbnail[data-id]");
+        if (!thumbnail) return;
 
-          const href = (linkEl as HTMLAnchorElement)?.href ?? "";
-          if (!href) return;
-          const lotUrl = href.startsWith("http") ? href : `${baseUrl}${href}`;
+        const id = thumbnail.getAttribute("data-id") ?? "";
+        if (!id) return;
 
-          // ID from URL
-          const idMatch = href.match(/\/(\d+)\/?(?:\?|$)/);
-          const id = idMatch?.[1] ?? href;
+        // Prefer the full-length title in the desktop-visible element
+        const titleEl =
+          card.querySelector(".auction-name.d-none.d-sm-block b.shortDesc") ??
+          card.querySelector("b.shortDesc");
+        const title = titleEl?.textContent?.trim() ?? "";
+        if (!title) return;
 
-          // Title
-          const titleEl = card.querySelector(
-            "h2, h3, h4, [class*='title'], [class*='name'], [class*='description']"
-          );
-          const title = titleEl?.textContent?.trim() ?? "";
-          if (!title) return;
+        // URL
+        const linkEl = card.querySelector("a[href*='/auction/view?id=']") as HTMLAnchorElement | null;
+        const lotUrl = linkEl?.href ?? `https://www.liquidation.com/auction/view?id=${id}`;
 
-          // Current bid
-          const bidEl = card.querySelector(
-            "[class*='current-bid'], [class*='bid-amount'], [class*='current_bid'], " +
-            "[class*='price']:not([class*='retail']):not([class*='msrp'])"
-          );
-          const bidText = bidEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
-          const currentBid = parseFloat(bidText) || 0;
+        // Current bid — "Current Bid: $25.00"
+        const bidEl = card.querySelector("li.current-bid");
+        const bidText = bidEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
+        const currentBid = parseFloat(bidText) || 0;
 
-          // Retail / MSRP value
-          const retailEl = card.querySelector(
-            "[class*='retail'], [class*='msrp'], [class*='original-price'], " +
-            "[class*='market-value'], [class*='manifest-value']"
-          );
-          const retailText = retailEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
-          const retailValue = parseFloat(retailText) || 0;
+        // Estimated retail — "Est. Retail: $119.96"
+        const retailEl = card.querySelector("li.est-retail");
+        const retailText = retailEl?.textContent?.replace(/[^0-9.]/g, "") ?? "";
+        const retailValue = parseFloat(retailText) || 0;
 
-          // Image
-          const imgEl = card.querySelector("img");
-          const imageUrl =
-            (imgEl as HTMLImageElement)?.src ||
-            imgEl?.getAttribute("data-src") ||
-            undefined;
+        // Image
+        const imgEl = card.querySelector("img.img-responsive") as HTMLImageElement | null;
+        const imageUrl = imgEl?.src || imgEl?.getAttribute("data-src") || undefined;
 
-          lots.push({ id, title, currentBid, retailValue, imageUrl, lotUrl, category: cat });
-        } catch {
-          // Skip malformed cards
-        }
-      });
+        lots.push({ id, title, currentBid, retailValue, imageUrl, lotUrl, category: cat });
+      } catch {
+        // Skip malformed cards
+      }
+    });
 
-      return lots;
-    },
-    category,
-    BASE_URL
-  );
+    return lots;
+  }, category);
 }
 
 async function scrapeCategory(
