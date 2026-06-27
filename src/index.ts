@@ -108,8 +108,9 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.includes('--web')) {
+    const port = parseInt(process.env.PORT || '3000');
     console.log('\n🌐 Starting Web Interface...\n');
-    await startWebServer(3000);
+    await startWebServer(port);
     console.log('\n💡 Open http://localhost:3000 in your browser\n');
     await new Promise(() => {}); // Keep running
   } else if (args.includes('--cli') || args.includes('-i')) {
