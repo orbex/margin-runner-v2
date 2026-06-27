@@ -81,50 +81,45 @@ async function extractLots(page: Page, category: string): Promise<AuctionLot[]> 
     console.log(`[liquidation] DEBUG: Page title: "${await page.title()}"`);
     console.log(`[liquidation] DEBUG: HTML length: ${html.length} chars`);
 
-    // Dump the first auction link's parent card so we can identify real selectors
+    // Dump all unique href patterns to identify individual lot URL format
     const cardInfo = await page.evaluate(() => {
-      // Find any anchor pointing to an individual auction
-      const auctionLink = document.querySelector(
-        "a[href*='/auction/view'], a[href*='/lot/'], a[href*='/auction/detail'], " +
-        "a[href*='/auction/']:not([href='/auction/search'])"
-      ) as HTMLAnchorElement | null;
+      // Collect all unique link href patterns (first 60 chars each, deduplicated by pattern)
+      const patterns = new Map<string, string>();
+      document.querySelectorAll("a[href]").forEach(a => {
+        const href = (a as HTMLAnchorElement).href;
+        const key = href.replace(/\d{4,}/g, "NNNN").slice(0, 80);
+        if (!patterns.has(key)) patterns.set(key, href);
+      });
 
-      if (!auctionLink) {
-        // Fall back: show all unique class names on the page to help identify containers
-        const allClasses = new Set<string>();
-        document.querySelectorAll("[class]").forEach(el => {
-          el.className.split(/\s+/).forEach(c => { if (c) allClasses.add(c); });
-        });
-        return {
-          found: false,
-          href: null,
-          cardHTML: null,
-          allClasses: [...allClasses].slice(0, 80).join(", "),
-        };
-      }
+      // Look for links with long numeric IDs — these are typically individual lot pages
+      const lotLink = [...document.querySelectorAll("a[href]")]
+        .find(a => /\/\d{6,}/.test((a as HTMLAnchorElement).href) &&
+                   !(a as HTMLAnchorElement).href.includes("search")) as HTMLAnchorElement | null;
 
-      // Walk up to find a meaningful card container (not body/html)
-      let container: Element = auctionLink;
-      for (let i = 0; i < 5; i++) {
-        if (container.parentElement && container.parentElement.tagName !== "BODY") {
-          container = container.parentElement;
+      let cardHTML: string | null = null;
+      if (lotLink) {
+        let container: Element = lotLink;
+        for (let i = 0; i < 6; i++) {
+          if (container.parentElement && !["BODY","HTML"].includes(container.parentElement.tagName)) {
+            container = container.parentElement;
+          }
         }
+        cardHTML = container.outerHTML.slice(0, 2000);
       }
 
       return {
-        found: true,
-        href: auctionLink.href,
-        cardHTML: container.outerHTML.slice(0, 2000),
-        allClasses: null,
+        lotHref: lotLink?.href ?? null,
+        cardHTML,
+        allPatterns: [...patterns.values()].slice(0, 30).join("\n"),
       };
     });
 
-    if (cardInfo.found) {
-      console.log(`[liquidation] DEBUG: Found auction link → ${cardInfo.href}`);
+    if (cardInfo.lotHref) {
+      console.log(`[liquidation] DEBUG: Lot link found → ${cardInfo.lotHref}`);
       console.log(`[liquidation] DEBUG: Card HTML sample:\n${cardInfo.cardHTML}`);
     } else {
-      console.log("[liquidation] DEBUG: No auction links found on page.");
-      console.log(`[liquidation] DEBUG: All CSS classes on page:\n${cardInfo.allClasses}`);
+      console.log("[liquidation] DEBUG: No lot links found. All link patterns on page:");
+      console.log(cardInfo.allPatterns);
     }
   }
 
